@@ -154,24 +154,57 @@ static esp_err_t http_resp_dir_html(httpd_req_t *req, const char *dirpath)
     return ESP_OK;
 }
 
-#define IS_FILE_EXT(filename, ext) \
-    (strcasecmp(&filename[strlen(filename) - sizeof(ext) + 1], ext) == 0)
+static const char *extension_part(const char *filename) {
+    const char *ext_ptr = strrchr(filename, '.');
+    if (ext_ptr == NULL) {
+        return "";
+    }
+    const char *ext_sep = strrchr(filename, '/');
+    if (ext_sep != NULL && ext_sep > ext_ptr) {
+        return "";
+    }
+    if (ext_ptr == filename + strlen(filename)) {
+        return "";
+    }
+    return ext_ptr + 1;
+}
+
+static const char *get_file_mime_type(const char *filename) {
+    const char *ext_mime_map[][2] = {
+        {"htm", "text/html"},
+        {"html", "text/html"},
+        {"js", "text/javascript"},
+        {"css", "text/css"},
+        {"xml", "text/xml"},
+        {"jpeg", "image/jpeg"},
+        {"jpg", "image/jpeg"},
+        {"png", "image/png"},
+        {"gif", "image/gif"},
+        {"bmp", "image/bmp"},
+        {"svg", "image/svg+xml"},
+        {"ico", "image/x-icon"},
+        {"json", "application/json"},
+        {"csv", "text/csv"},
+        {"pdf", "application/pdf"},
+        {"txt", "text/plain"},
+        {"bin", "application/octet-stream"} /* Default to this */
+    };
+
+    const char *ext_ptr = extension_part(filename);
+
+    for (int i = 0; i < sizeof(ext_mime_map) / sizeof(ext_mime_map[0]); i++) {
+        if (strcasecmp(ext_ptr, ext_mime_map[i][0]) == 0) {
+            return ext_mime_map[i][1];
+        }
+    }
+
+    return ext_mime_map[sizeof(ext_mime_map) / sizeof(ext_mime_map[0]) - 1][1];
+}
 
 /* Set HTTP response content type according to file extension */
 static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename)
 {
-    if (IS_FILE_EXT(filename, ".pdf")) {
-        return httpd_resp_set_type(req, "application/pdf");
-    } else if (IS_FILE_EXT(filename, ".html")) {
-        return httpd_resp_set_type(req, "text/html");
-    } else if (IS_FILE_EXT(filename, ".jpeg")) {
-        return httpd_resp_set_type(req, "image/jpeg");
-    } else if (IS_FILE_EXT(filename, ".ico")) {
-        return httpd_resp_set_type(req, "image/x-icon");
-    }
-    /* This is a limited set only */
-    /* For any other type always set as plain text */
-    return httpd_resp_set_type(req, "text/plain");
+    return httpd_resp_set_type(req, get_file_mime_type(filename));
 }
 
 /* Copies the full path into destination buffer and returns
